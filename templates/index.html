@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exam Generator</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 2em auto;
+      max-width: 800px;
+      line-height: 1.6;
+    }
+    .container {
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    textarea, input, select { 
+      width: 100%; 
+      margin-bottom: 1em;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button { 
+      padding: 10px 15px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin-right: 5px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    #result {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+    .loading {
+      display: none;
+      text-align: center;
+      margin: 10px 0;
+    }
+    .taxonomy-info {
+      background-color: #e8f4f8;
+      padding: 10px;
+      margin: 10px 0;
+      border-left: 3px solid #3498db;
+      border-radius: 3px;
+    }
+    .saved-sets {
+      margin-top: 20px;
+      border-top: 1px solid #eee;
+      padding-top: 15px;
+    }
+    .saved-set {
+      background-color: #f5f5f5;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    .saved-set-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .set-name-input {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .delete-btn {
+      background-color: #e74c3c;
+    }
+    .delete-btn:hover {
+      background-color: #c0392b;
+    }
+    .append-btn {
+      background-color: #2ecc71;
+    }
+    .append-btn:hover {
+      background-color: #27ae60;
+    }
+    .toggle-bloom-btn {
+      background-color: #9b59b6;
+    }
+    .toggle-bloom-btn:hover {
+      background-color: #8e44ad;
+    }
+    .bloom-justification {
+      background-color: #f0e6ff;
+      padding: 10px;
+      margin-top: 5px;
+      border-left: 3px solid #9b59b6;
+      border-radius: 3px;
+      display: none;
+    }
+    .grading-criteria {
+      background-color: #e6ffe6;
+      padding: 10px;
+      margin-top: 5px;
+      border-left: 3px solid #2ecc71;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Exam Question Generator</h1>
+    
+    <h2>Step 1: Upload File to Summarize</h2>
+    <input type="file" id="textFile" />
+    <button onclick="uploadFile()">Summarize</button>
+    <div id="summarizeLoading" class="loading">Processing...</div>
+    
+    <h3>Summary</h3>
+    <textarea id="summary" rows="6" placeholder="Your summary will appear here..."></textarea>
+
+    <h2>Step 2: Generate Questions</h2>
+    <label>Question Type:</label>
+    <select id="type">
+      <option value="multiple_choice">Multiple Choice</option>
+      <option value="true_or_false">True or False</option>
+      <option value="identification">Identification</option>
+      <option value="open_ended">Open Ended</option>
+    </select>
+    
+    <div id="typeInfo" style="margin: 10px 0; padding: 10px; background-color: #e7f3fe; border-left: 5px solid #2196F3; display: none;">
+      <p><strong>Question Type Information:</strong> <span id="typeDescription"></span></p>
+    </div>
+    
+    <label>Bloom Level:</label>
+    <select id="bloom_level">
+      <option>Remember</option>
+      <option>Understand</option>
+      <option>Apply</option>
+      <option>Analyze</option>
+      <option>Evaluate</option>
+      <option>Create</option>
+    </select>
+
+    <label>Difficulty:</label>
+    <select id="difficulty">
+      <option>Easy</option>
+      <option>Medium</option>
+      <option>Hard</option>
+    </select>
+
+    <label>Quantity:</label>
+    <input type="number" id="quantity" value="2" min="1" max="5" />
+    <div class="action-buttons">
+      <button onclick="generateQuestions()">Generate Questions</button>
+      <button onclick="toggleBloomJustifications()" class="toggle-bloom-btn">Toggle Bloom Justifications</button>
+    </div>
+    <div id="generateLoading" class="loading">Generating questions...</div>
+
+    <div class="set-name-input">
+      <input type="text" id="setName" placeholder="Question Set Name" />
+      <button onclick="saveCurrentQuestionSet()">Save Question Set</button>
+    </div>
+
+    <h3>Generated Questions</h3>
+    <div id="result"></div>
+
+    <h2>Saved Question Sets</h2>
+    <div id="savedSets" class="saved-sets">
+      <p>No saved question sets yet.</p>
+    </div>
+  </div>
+
+  <script>
+    // Store question sets in memory
+    let currentQuestions = [];
+    let savedQuestionSets = [];
+    let showBloomJustifications = false;
+
+    async function uploadFile() {
+      const fileInput = document.getElementById('textFile');
+      if (!fileInput.files.length) return alert("Please upload a file");
+
+      // Show loading indicator
+      document.getElementById('summarizeLoading').style.display = 'block';
+      
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      try {
+        const res = await fetch("/summarize", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        document.getElementById("summary").value = data.summary || data.error;
+      } catch (error) {
+        alert("Error summarizing text: " + error);
+      } finally {
+        // Hide loading indicator
+        document.getElementById('summarizeLoading').style.display = 'none';
+      }
+    }
+
+    async function generateQuestions() {
+      const summary = document.getElementById("summary").value;
+      if (!summary.trim()) return alert("No summary available. Please upload and summarize a file first.");
+
+      // Show loading indicator
+      document.getElementById('generateLoading').style.display = 'block';
+      document.getElementById("result").textContent = "";
+
+      const payload = {
+        summary,
+        questions: [
+          {
+            type: document.getElementById("type").value,
+            bloom_level: document.getElementById("bloom_level").value,
+            difficulty: document.getElementById("difficulty").value,
+            quantity: parseInt(document.getElementById("quantity").value)
+          }
+        ]
+      };
+
+      try {
+        const res = await fetch("/generate", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        
+        // Store current questions
+        currentQuestions = data;
+        
+        // Format the response for better readability
+        if (data.error) {
+          document.getElementById("result").textContent = "Error: " + data.error;
+        } else {
+          formatAndDisplayQuestions(data);
+        }
+      } catch (error) {
+        document.getElementById("result").textContent = "Error generating questions: " + error;
+      } finally {
+        // Hide loading indicator
+        document.getElementById('generateLoading').style.display = 'none';
+      }
+    }
+
+    function formatAndDisplayQuestions(data) {
+      const resultElement = document.getElementById("result");
+      resultElement.innerHTML = "";
+      
+      data.forEach(questionSet => {
+        const questions = questionSet.questions;
+        const questionType = questionSet.type;
+        const bloomLevel = questionSet.bloom_level;
+        
+        const header = document.createElement("div");
+        header.innerHTML = `<h4>${questionType.toUpperCase().replace("_", " ")} Questions (${bloomLevel} Level)</h4>`;
+        resultElement.appendChild(header);
+        
+        // Display each question with better formatting
+        if (Array.isArray(questions)) {
+          questions.forEach((q, index) => {
+            const questionDiv = document.createElement("div");
+            questionDiv.style.marginBottom = "20px";
+            questionDiv.style.padding = "15px";
+            questionDiv.style.backgroundColor = "#f9f9f9";
+            questionDiv.style.borderRadius = "5px";
+            questionDiv.style.border = "1px solid #ddd";
+            
+            // Create HTML based on question type
+            let questionHTML = '';
+            
+            if (questionType === "multiple_choice") {
+              questionHTML = `
+                <p><strong>Q${index+1}:</strong> ${q.question}</p>
+                <ul style="list-style-type: lower-alpha;">
+                  ${q.options ? q.options.map(opt => `<li>${opt}</li>`).join('') : '<li>Error: No options available</li>'}
+                </ul>
+                <p><strong>Answer:</strong> ${q.answer}</p>
+                ${q.explanation ? `<p><strong>Explanation:</strong> ${q.explanation}</p>` : ''}
+              `;
+            } else if (questionType === "true_or_false") {
+              questionHTML = `
+                <p><strong>Q${index+1}:</strong> ${q.question}</p>
+                <p><strong>Answer:</strong> ${q.answer}</p>
+                ${q.explanation ? `<p><strong>Explanation:</strong> ${q.explanation}</p>` : ''}
+              `;
+            } else if (questionType === "identification") {
+              questionHTML = `
+                <p><strong>Q${index+1}:</strong> ${q.question}</p>
+                <p><strong>Answer:</strong> ${q.answer}</p>
+                ${q.explanation ? `<p><strong>Explanation:</strong> ${q.explanation}</p>` : ''}
+              `;  
+            } else if (questionType === "open_ended") {
+              const keyPoints = q.key_points ? 
+                `<div><strong>Key Points:</strong>
+                  <ul>${q.key_points.map(point => `<li>${point}</li>`).join('')}</ul>
+                </div>` : '';
+                
+              questionHTML = `
+                <p><strong>Q${index+1}:</strong> ${q.question}</p>
+                <p><strong>Sample Answer:</strong> ${q.answer || "Not provided"}</p>
+                ${keyPoints}
+                ${q.grading_criteria ? `<div class="grading-criteria"><strong>Grading Criteria:</strong> ${q.grading_criteria}</div>` : ''}
+              `;
+            } else {
+              // Generic handling for any other type
+              questionHTML = `
+                <p><strong>Q${index+1}:</strong></p>
+                <pre>${JSON.stringify(q, null, 2)}</pre>
+              `;
+            }
+            
+            // Add Bloom's taxonomy justification if available
+            if (q.bloom_justification) {
+              questionHTML += `
+                <div class="bloom-justification" style="${showBloomJustifications ? 'display:block' : ''}">
+                  <strong>Bloom's Taxonomy Justification:</strong> ${q.bloom_justification}
+                </div>
+              `;
+            }
+            
+            questionDiv.innerHTML = questionHTML;
+            resultElement.appendChild(questionDiv);
+          });
+        } else if (questions.error) {
+          // Handle error case
+          const errorDiv = document.createElement("div");
+          errorDiv.style.color = "red";
+          errorDiv.textContent = questions.error;
+          resultElement.appendChild(errorDiv);
+        } else {
+          // Fallback for unexpected format
+          resultElement.appendChild(document.createTextNode(JSON.stringify(questions, null, 2)));
+        }
+      });
+    }
+
+    function toggleBloomJustifications() {
+      showBloomJustifications = !showBloomJustifications;
+      
+      // Toggle display of all bloom justification elements
+      const justifications = document.querySelectorAll('.bloom-justification');
+      justifications.forEach(element => {
+        element.style.display = showBloomJustifications ? 'block' : 'none';
+      });
+    }
+    
+    function saveCurrentQuestionSet() {
+      if (currentQuestions.length === 0) {
+        alert("No questions to save. Please generate questions first.");
+        return;
+      }
+      
+      const setNameInput = document.getElementById('setName');
+      let setName = setNameInput.value.trim();
+      
+      if (!setName) {
+        // Generate a default name if none provided
+        const type = document.getElementById("type").value;
+        const bloomLevel = document.getElementById("bloom_level").value;
+        setName = `${type.replace("_", " ")} Questions (${bloomLevel})`;
+      }
+      
+      // Create a new question set object
+      const newSet = {
+        id: Date.now().toString(), // Use timestamp as unique ID
+        name: setName,
+        questions: JSON.parse(JSON.stringify(currentQuestions)) // Create a deep copy
+      };
+      
+      // Add to saved sets
+      savedQuestionSets.push(newSet);
+      
+      // Clear the set name input
+      setNameInput.value = '';
+      
+      // Update the UI
+      updateSavedSetsDisplay();
+      
+      alert(`Question set "${setName}" saved successfully!`);
+    }
+    
+    function updateSavedSetsDisplay() {
+      const savedSetsElement = document.getElementById('savedSets');
+      
+      if (savedQuestionSets.length === 0) {
+        savedSetsElement.innerHTML = '<p>No saved question sets yet.</p>';
+        return;
+      }
+      
+      // Clear current content
+      savedSetsElement.innerHTML = '';
+      
+      // Add each saved set
+      savedQuestionSets.forEach(set => {
+        const setElement = document.createElement('div');
+        setElement.className = 'saved-set';
+        
+        // Count the total number of questions in this set
+        let totalQuestions = 0;
+        set.questions.forEach(questionSet => {
+          if (Array.isArray(questionSet.questions)) {
+            totalQuestions += questionSet.questions.length;
+          }
+        });
+        
+        // Create summary of question types in this set
+        const questionTypes = set.questions.map(q => q.type.replace('_', ' ')).join(', ');
+        
+        setElement.innerHTML = `
+          <div class="saved-set-title">${set.name}</div>
+          <p>Contains ${totalQuestions} question(s) of type(s): ${questionTypes}</p>
+          <div class="action-buttons">
+            <button onclick="displayQuestionSet('${set.id}')">Display</button>
+            <button onclick="appendToSet('${set.id}')" class="append-btn">Append Current Questions</button>
+            <button onclick="deleteQuestionSet('${set.id}')" class="delete-btn">Delete</button>
+          </div>
+        `;
+        
+        savedSetsElement.appendChild(setElement);
+      });
+    }
+    
+    function displayQuestionSet(setId) {
+      const set = savedQuestionSets.find(s => s.id === setId);
+      if (!set) return;
+      
+      // Display the questions in the result area
+      formatAndDisplayQuestions(set.questions);
+    }
+    
+    function appendToSet(setId) {
+      if (currentQuestions.length === 0) {
+        alert("No questions to append. Please generate questions first.");
+        return;
+      }
+      
+      const setIndex = savedQuestionSets.findIndex(s => s.id === setId);
+      if (setIndex === -1) return;
+      
+      // Append the current questions to the selected set
+      savedQuestionSets[setIndex].questions = [
+        ...savedQuestionSets[setIndex].questions,
+        ...JSON.parse(JSON.stringify(currentQuestions)) // Deep copy
+      ];
+      
+      // Update the UI
+      updateSavedSetsDisplay();
+      
+      alert(`Questions appended to "${savedQuestionSets[setIndex].name}" successfully!`);
+    }
+    
+    function deleteQuestionSet(setId) {
+      if (!confirm("Are you sure you want to delete this question set?")) return;
+      
+      // Remove the set with the matching ID
+      savedQuestionSets = savedQuestionSets.filter(s => s.id !== setId);
+      
+      // Update the UI
+      updateSavedSetsDisplay();
+    }
+
+    // Initialize type information display
+    document.getElementById('type').addEventListener('change', function() {
+      const type = this.value;
+      const infoDiv = document.getElementById('typeInfo');
+      const descSpan = document.getElementById('typeDescription');
+      
+      infoDiv.style.display = 'block';
+      
+      switch(type) {
+        case 'multiple_choice':
+          descSpan.textContent = 'Questions with 4 options where only one answer is correct.';
+          break;
+        case 'true_or_false':
+          descSpan.textContent = 'Statements that the student must identify as either true or false.';
+          break;
+        case 'identification':
+          descSpan.textContent = 'Questions that require a specific term, concept, or fact as an answer.';
+          break;
+        case 'open_ended':
+          descSpan.textContent = 'Questions that require longer responses and critical thinking. Comes with sample answers and key points to look for.';
+          break;
+        default:
+          infoDiv.style.display = 'none';
+      }
+    });
+    
+    // Trigger the change event to initialize the description
+    document.getElementById('type').dispatchEvent(new Event('change'));
+  </script>
+</body>
+</html>
