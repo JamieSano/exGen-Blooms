@@ -554,6 +554,11 @@ def send_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
+    # Get port from environment variable or default to 10000
+    port = int(os.environ.get("PORT", 10000))
+    
+    # Run the app binding to 0.0.0.0 (all network interfaces)
+    app.run(host="0.0.0.0", port=port)
     # Ensure the static directory exists
     if not os.path.exists('static'):
         os.makedirs('static')
